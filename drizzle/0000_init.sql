@@ -1,0 +1,15 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE TYPE mission_status AS ENUM ('queued', 'planning', 'awaiting_approval', 'running', 'verifying', 'succeeded', 'failed', 'cancelled');
+CREATE TYPE task_status AS ENUM ('queued', 'running', 'succeeded', 'failed', 'cancelled');
+CREATE TABLE organizations (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email text NOT NULL UNIQUE, display_name text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE memberships (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES users(id), organization_id uuid NOT NULL REFERENCES organizations(id), role text NOT NULL DEFAULT 'owner');
+CREATE UNIQUE INDEX membership_user_org_unique ON memberships(user_id, organization_id);
+CREATE TABLE missions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid NOT NULL REFERENCES organizations(id), created_by uuid NOT NULL REFERENCES users(id), title text NOT NULL, objective text NOT NULL, status mission_status NOT NULL DEFAULT 'queued', provider text NOT NULL DEFAULT 'demo', budget_cents integer NOT NULL DEFAULT 0, error text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX missions_org_created_idx ON missions(organization_id, created_at);
+CREATE TABLE mission_tasks (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), mission_id uuid NOT NULL REFERENCES missions(id) ON DELETE CASCADE, title text NOT NULL, agent text NOT NULL, status task_status NOT NULL DEFAULT 'queued', sequence integer NOT NULL, output jsonb);
+CREATE INDEX mission_tasks_order_idx ON mission_tasks(mission_id, sequence);
+CREATE TABLE mission_events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), mission_id uuid NOT NULL REFERENCES missions(id) ON DELETE CASCADE, kind text NOT NULL, message text NOT NULL, sequence integer NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), metadata jsonb);
+CREATE UNIQUE INDEX mission_event_sequence_unique ON mission_events(mission_id, sequence);
+CREATE TABLE document_chunks (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid NOT NULL REFERENCES organizations(id), content text NOT NULL, embedding vector(1536), metadata jsonb);
